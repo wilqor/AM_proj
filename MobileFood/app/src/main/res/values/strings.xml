@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Mobile Food</string>
+    <string name="action_settings">Settings</string>
+    <string name="server_client_id">967613229375-h8fdimc3cr81jpt6s02hcva1bbn8fb58.apps.googleusercontent.com</string>
+    <string name="server_api_path">http://192.168.2.103:8080</string>
+    <string name="mainTitle">Mobile Food App menu</string>
+    <string name="products_header_label">Products</string>
+    <string name="addProductLabel">Add product</string>
+</resources>
