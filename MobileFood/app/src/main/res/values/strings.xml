@@ -6,4 +6,5 @@
     <string name="mainTitle">Mobile Food App menu</string>
     <string name="products_header_label">Products</string>
     <string name="addProductLabel">Add product</string>
+    <string name="syncLabel">Synchronize</string>
 </resources>

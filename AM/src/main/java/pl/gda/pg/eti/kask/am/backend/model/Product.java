@@ -7,6 +7,7 @@ public class Product {
     private String name;
     private Integer id;
     private int quantity;
+    private int deviceQuantity;
 
     public Product(){ }
 
@@ -14,6 +15,13 @@ public class Product {
         this.name = name;
         this.id = id;
         this.quantity = quantity;
+    }
+
+    public Product(int id, String name, int quantity, int deviceQuantity) {
+        this.id = id;
+        this.name = name;
+        this.quantity = quantity;
+        this.deviceQuantity = deviceQuantity;
     }
 
     public String getName() {
@@ -38,5 +46,17 @@ public class Product {
 
     public void setId(Integer id) {
         this.id = id;
+    }
+
+    public int getDeviceQuantity() {
+        return deviceQuantity;
+    }
+
+    public void setDeviceQuantity(int deviceQuantity) {
+        this.deviceQuantity = deviceQuantity;
+    }
+
+    public boolean notSynchronizedYet() {
+        return id == 0;
     }
 }

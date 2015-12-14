@@ -28,12 +28,16 @@ public class ProductAdapter extends ArrayAdapter<Product> {
         this.handler = handler;
     }
 
-    public Product getById(int id) {
+    public Product get(long localId) {
         for (Product prod : products) {
-            if (prod.getId().equals(id))
+            if (prod.getLocalId() == localId)
                 return prod;
         }
         return null;
+    }
+
+    public List<Product> getProducts() {
+        return products;
     }
 
     @Override

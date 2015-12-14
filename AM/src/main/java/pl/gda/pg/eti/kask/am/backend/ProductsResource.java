@@ -22,33 +22,41 @@ public class ProductsResource {
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public Response getProducts(@HeaderParam("ownerGoogleId") String ownerGoogleId,
-                                @HeaderParam("ownerGoogleToken") String ownerGoogleToken) {
+                                @HeaderParam("ownerGoogleToken") String ownerGoogleToken,
+                                @HeaderParam("deviceId") String deviceId) {
         if (Strings.isNullOrEmpty(ownerGoogleId) || Strings.isNullOrEmpty(ownerGoogleToken)) {
             return Response.status(Response.Status.BAD_REQUEST).build();
         }
         if (!verified(ownerGoogleId, ownerGoogleToken)) {
             return Response.status(Response.Status.UNAUTHORIZED).build();
         }
-        List<Product> resultProducts = ProductEntity.toProducts(productBean.findProducts(ownerGoogleId));
-        GenericEntity<List<Product>> entity = new GenericEntity<List<Product>>(resultProducts) {
-        };
-        return Response.ok(entity).build();
+        List<Product> resultProducts = productBean.findProducts(ownerGoogleId, deviceId);
+        return Response.ok(productsToGenericList(resultProducts)).build();
+    }
+
+    private GenericEntity<List<Product>> productsToGenericList(final List<Product> resultProducts) {
+        return new GenericEntity<List<Product>>(resultProducts) {
+            };
     }
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     public Response addProduct(@HeaderParam("ownerGoogleId") String ownerGoogleId,
                                @HeaderParam("ownerGoogleToken") String ownerGoogleToken,
+                               @HeaderParam("deviceId") String deviceId,
                                Product product) {
         if (Strings.isNullOrEmpty(ownerGoogleId) || Strings.isNullOrEmpty(ownerGoogleToken)
-                || product.getId() != null || product.getQuantity() != 0) {
+                || !product.notSynchronizedYet() || product.getQuantity() != 0) {
             return Response.status(Response.Status.BAD_REQUEST).build();
         }
         if (!verified(ownerGoogleId, ownerGoogleToken)) {
             return Response.status(Response.Status.UNAUTHORIZED).build();
         }
-        Product created = ProductEntity.toProduct(productBean.createProduct(product, ownerGoogleId));
-        return Response.status(Response.Status.CREATED).entity(created).build();
+        Product entity = productBean.createOrUpdateProduct(product, ownerGoogleId, deviceId);
+        if (entity == null) {
+            return Response.status(Response.Status.UNAUTHORIZED).build();
+        }
+        return Response.ok(entity).build();
     }
 
     @GET
@@ -56,8 +64,9 @@ public class ProductsResource {
     @Produces(MediaType.APPLICATION_JSON)
     public Response getProductById(@HeaderParam("ownerGoogleId") String ownerGoogleId,
                                    @HeaderParam("ownerGoogleToken") String ownerGoogleToken,
+                                   @HeaderParam("deviceId") String deviceId,
                                    @PathParam("id") Integer id) {
-        if (Strings.isNullOrEmpty(ownerGoogleId) || Strings.isNullOrEmpty(ownerGoogleToken)|| id == null) {
+        if (Strings.isNullOrEmpty(ownerGoogleId) || Strings.isNullOrEmpty(ownerGoogleToken) || id == null) {
             return Response.status(Response.Status.BAD_REQUEST).build();
         }
         if (!verified(ownerGoogleId, ownerGoogleToken)) {
@@ -79,6 +88,7 @@ public class ProductsResource {
     @Path("/{id:[0-9]+}")
     public Response deleteProduct(@HeaderParam("ownerGoogleId") String ownerGoogleId,
                                   @HeaderParam("ownerGoogleToken") String ownerGoogleToken,
+                                  @HeaderParam("deviceId") String deviceId,
                                   @PathParam("id") Integer id) {
         if (Strings.isNullOrEmpty(ownerGoogleId) || Strings.isNullOrEmpty(ownerGoogleToken) || id == null) {
             return Response.status(Response.Status.BAD_REQUEST).build();
@@ -102,6 +112,7 @@ public class ProductsResource {
     @Path("/{id:[0-9]+}")
     public Response updateProductQuantity(@HeaderParam("ownerGoogleId") String ownerGoogleId,
                                           @HeaderParam("ownerGoogleToken") String ownerGoogleToken,
+                                          @HeaderParam("deviceId") String deviceId,
                                           @PathParam("id") Integer id, Product product) {
         if (Strings.isNullOrEmpty(ownerGoogleId) || Strings.isNullOrEmpty(ownerGoogleToken)
                 || id == null || product == null) {
@@ -110,16 +121,28 @@ public class ProductsResource {
         if (!verified(ownerGoogleId, ownerGoogleToken)) {
             return Response.status(Response.Status.UNAUTHORIZED).build();
         }
-        ProductEntity entity = productBean.findProduct(id);
+        Product entity = productBean.createOrUpdateProduct(product, ownerGoogleId, deviceId);
         if (entity == null) {
-            return Response.status(Response.Status.NOT_FOUND).build();
-        }
-        boolean isOwnerOfProduct = ownerGoogleId.equals(entity.getOwnerGoogleId());
-        if (!isOwnerOfProduct) {
             return Response.status(Response.Status.UNAUTHORIZED).build();
         }
-        productBean.updateProductQuantity(entity, product);
-        return Response.ok().build();
+        return Response.ok(entity).build();
+    }
+
+    @PUT
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response updateProductList(@HeaderParam("ownerGoogleId") String ownerGoogleId,
+                                      @HeaderParam("ownerGoogleToken") String ownerGoogleToken,
+                                      @HeaderParam("deviceId") String deviceId,
+                                      List<Product> products) {
+        if (Strings.isNullOrEmpty(ownerGoogleId) || Strings.isNullOrEmpty(ownerGoogleToken)
+                || products == null) {
+            return Response.status(Response.Status.BAD_REQUEST).build();
+        }
+        if (!verified(ownerGoogleId, ownerGoogleToken)) {
+            return Response.status(Response.Status.UNAUTHORIZED).build();
+        }
+        List<Product> responseProducts = productBean.updateProducts(products, ownerGoogleId, deviceId);
+        return Response.ok(productsToGenericList(responseProducts)).build();
     }
 
     private boolean verified(String ownerGoogleId, String ownerGoogleToken) {

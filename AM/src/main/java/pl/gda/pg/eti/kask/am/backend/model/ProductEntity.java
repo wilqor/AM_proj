@@ -27,6 +27,9 @@ public class ProductEntity {
     @Column(name = "owner_google_id")
     private String ownerGoogleId;
 
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL)
+    private List<ProductSubsetEntity> subsets = new ArrayList<>();
+
     public ProductEntity() {}
 
     public ProductEntity(Product product, String ownerGoogleId) {
@@ -63,8 +66,16 @@ public class ProductEntity {
         return id;
     }
 
+    public List<ProductSubsetEntity> getSubsets() {
+        return subsets;
+    }
+
     public static Product toProduct(ProductEntity entity) {
         return new Product(entity.id, entity.name, entity.quantity);
+    }
+
+    public static Product toProduct(ProductEntity entity, int deviceQuantity) {
+        return new Product(entity.id, entity.name, entity.quantity, deviceQuantity);
     }
 
     public static List<Product> toProducts(List<ProductEntity> entities) {
