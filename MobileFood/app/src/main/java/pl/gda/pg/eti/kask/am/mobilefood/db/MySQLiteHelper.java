@@ -10,7 +10,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class MySQLiteHelper extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "food.db";
-    private static final int DATABASE_VERSION = 1;
+    private static final int DATABASE_VERSION = 2;
 
     public MySQLiteHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -19,10 +19,14 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
     @Override
     public void onCreate(SQLiteDatabase db) {
         ProductsTable.onCreate(db);
+        TagsTable.onCreate(db);
+        ProductTagRelationTable.onCreate(db);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         ProductsTable.onUpgrade(db, oldVersion, newVersion);
+        TagsTable.onUpgrade(db, oldVersion, newVersion);
+        ProductTagRelationTable.onUpgrade(db, oldVersion, newVersion);
     }
 }

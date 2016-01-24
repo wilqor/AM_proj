@@ -7,4 +7,13 @@
     <string name="products_header_label">Products</string>
     <string name="addProductLabel">Add product</string>
     <string name="syncLabel">Synchronize</string>
+    <string name="add_new_tag">Add new</string>
+    <string name="add_existing_tag">Add existing</string>
+    <string name="product_details_header">Product details</string>
+    <string name="product_details_name_label">Name:</string>
+    <string name="product_details_quantity_label">Quantity:</string>
+    <string name="product_details_priority_label">Priority:</string>
+    <string name="product_details_associated_tags_header">Associated tags</string>
+    <string name="observed_tags_header">Observed tags</string>
+    <string name="configure_observed_tags_label">Configure observed tags</string>
 </resources>

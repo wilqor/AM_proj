@@ -27,7 +27,7 @@ public class ProductsResource {
         if (Strings.isNullOrEmpty(ownerGoogleId) || Strings.isNullOrEmpty(ownerGoogleToken)) {
             return Response.status(Response.Status.BAD_REQUEST).build();
         }
-        if (!verified(ownerGoogleId, ownerGoogleToken)) {
+        if (!AccountVerifier.verified(ownerGoogleId, ownerGoogleToken)) {
             return Response.status(Response.Status.UNAUTHORIZED).build();
         }
         List<Product> resultProducts = productBean.findProducts(ownerGoogleId, deviceId);
@@ -49,7 +49,7 @@ public class ProductsResource {
                 || !product.notSynchronizedYet() || product.getQuantity() != 0) {
             return Response.status(Response.Status.BAD_REQUEST).build();
         }
-        if (!verified(ownerGoogleId, ownerGoogleToken)) {
+        if (!AccountVerifier.verified(ownerGoogleId, ownerGoogleToken)) {
             return Response.status(Response.Status.UNAUTHORIZED).build();
         }
         Product entity = productBean.createOrUpdateProduct(product, ownerGoogleId, deviceId);
@@ -69,7 +69,7 @@ public class ProductsResource {
         if (Strings.isNullOrEmpty(ownerGoogleId) || Strings.isNullOrEmpty(ownerGoogleToken) || id == null) {
             return Response.status(Response.Status.BAD_REQUEST).build();
         }
-        if (!verified(ownerGoogleId, ownerGoogleToken)) {
+        if (!AccountVerifier.verified(ownerGoogleId, ownerGoogleToken)) {
             return Response.status(Response.Status.UNAUTHORIZED).build();
         }
         ProductEntity entity = productBean.findProduct(id);
@@ -93,7 +93,7 @@ public class ProductsResource {
         if (Strings.isNullOrEmpty(ownerGoogleId) || Strings.isNullOrEmpty(ownerGoogleToken) || id == null) {
             return Response.status(Response.Status.BAD_REQUEST).build();
         }
-        if (!verified(ownerGoogleId, ownerGoogleToken)) {
+        if (!AccountVerifier.verified(ownerGoogleId, ownerGoogleToken)) {
             return Response.status(Response.Status.UNAUTHORIZED).build();
         }
         ProductEntity entity = productBean.findProduct(id);
@@ -118,7 +118,7 @@ public class ProductsResource {
                 || id == null || product == null) {
             return Response.status(Response.Status.BAD_REQUEST).build();
         }
-        if (!verified(ownerGoogleId, ownerGoogleToken)) {
+        if (!AccountVerifier.verified(ownerGoogleId, ownerGoogleToken)) {
             return Response.status(Response.Status.UNAUTHORIZED).build();
         }
         Product entity = productBean.createOrUpdateProduct(product, ownerGoogleId, deviceId);
@@ -138,14 +138,10 @@ public class ProductsResource {
                 || products == null) {
             return Response.status(Response.Status.BAD_REQUEST).build();
         }
-        if (!verified(ownerGoogleId, ownerGoogleToken)) {
+        if (!AccountVerifier.verified(ownerGoogleId, ownerGoogleToken)) {
             return Response.status(Response.Status.UNAUTHORIZED).build();
         }
         List<Product> responseProducts = productBean.updateProducts(products, ownerGoogleId, deviceId);
         return Response.ok(productsToGenericList(responseProducts)).build();
-    }
-
-    private boolean verified(String ownerGoogleId, String ownerGoogleToken) {
-        return new AccountVerifier(ownerGoogleId, ownerGoogleToken).verify();
     }
 }

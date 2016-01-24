@@ -3,7 +3,9 @@ package pl.gda.pg.eti.kask.am.mobilefood.logic;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.database.sqlite.SQLiteDatabase;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
@@ -25,43 +27,59 @@ import java.util.List;
 import java.util.Set;
 
 import pl.gda.pg.eti.kask.am.mobilefood.R;
+import pl.gda.pg.eti.kask.am.mobilefood.db.DBGetter;
+import pl.gda.pg.eti.kask.am.mobilefood.db.ProductTagRelationDataSource;
 import pl.gda.pg.eti.kask.am.mobilefood.db.ProductsDataSource;
+import pl.gda.pg.eti.kask.am.mobilefood.db.TagsDataSource;
 import pl.gda.pg.eti.kask.am.mobilefood.model.Product;
-import pl.gda.pg.eti.kask.am.mobilefood.rest.ProductService;
+import pl.gda.pg.eti.kask.am.mobilefood.model.ProductTagRelation;
+import pl.gda.pg.eti.kask.am.mobilefood.model.Tag;
+import pl.gda.pg.eti.kask.am.mobilefood.rest.RemoteService;
 import retrofit.Call;
 import retrofit.GsonConverterFactory;
 import retrofit.Response;
 import retrofit.Retrofit;
 
 public class ProductActivity extends AppCompatActivity implements View.OnClickListener,
-        ProductActionHandler {
-
+        ProductListActionHandler {
     private static final String TAG = "ProductActivity";
 
     private String userGoogleId;
     private String userGoogleToken;
     private String serverAddress;
     private String deviceId;
-    private ProductService productService;
-    private ProductAdapter adapter;
+    private RemoteService remoteService;
+    private ProductListAdapter adapter;
     private Set<String> idsToDelete;
-    private ProductsDataSource dataSource;
+    private Set<String> observedTagIds;
     private ProgressDialog progressDialog;
+    private ProductsDataSource productDataSource;
+    private ProductTagRelationDataSource relationsDataSource;
+    private TagsDataSource tagsDataSource;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_product);
 
-        dataSource = new ProductsDataSource(this);
-        dataSource.open();
         getUserParametersFromIntent();
+        setOnClickListenerForButtons();
+        setAddProductAndSyncButtonsEnabled(false);
+        prepareRemoteService();
+        prepareProgressDialog();
+    }
+
+    private void setOnClickListenerForButtons() {
         findViewById(R.id.button_add_product).setOnClickListener(this);
         findViewById(R.id.button_sync).setOnClickListener(this);
-        setAddProductAndSyncButtonsEnabled(false);
-        prepareProductService();
-        populateListAdapter();
-        prepareProgressDialog();
+        findViewById(R.id.button_configure_tags).setOnClickListener(this);
+    }
+
+    private void prepareDataSources() {
+        SQLiteDatabase db = new DBGetter(this).getDb();
+        productDataSource = new ProductsDataSource(db);
+        relationsDataSource = new ProductTagRelationDataSource(db);
+        tagsDataSource = new TagsDataSource(db);
     }
 
     private void prepareProgressDialog() {
@@ -75,16 +93,11 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
     protected void onResume() {
         super.onResume();
 
-        dataSource.open();
+        prepareDataSources();
         initializeIdsToDelete();
+        initializeObservedTags();
+        populateListAdapterAndSetViewEnabled();
         progressDialog.dismiss();
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-
-        dataSource.close();
     }
 
     private void initializeIdsToDelete() {
@@ -92,6 +105,13 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
                 MODE_PRIVATE);
         idsToDelete = new HashSet<>(pref.getStringSet(Consts.SHARED_PREF_DELETE_ID_SET_KEY, new HashSet<String>()));
         Log.d(TAG, "Initialized with ids to delete set: " + idsToDelete);
+    }
+
+    private void initializeObservedTags() {
+        SharedPreferences pref = getApplicationContext().getSharedPreferences(Consts.SHARED_PREFERENCES_NAME,
+                MODE_PRIVATE);
+        observedTagIds = new HashSet<>(pref.getStringSet(Consts.SHARED_PREF_OBSERVED_TAG_IDS_KEY, new HashSet<String>()));
+        Log.d(TAG, "Initialized with observed tag ids: " + observedTagIds);
     }
 
     private void saveIdsToDelete() {
@@ -115,7 +135,7 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
         saveIdsToDelete();
     }
 
-    private void prepareProductService() {
+    private void prepareRemoteService() {
         final GsonBuilder gsonBuilder = new GsonBuilder();
         gsonBuilder.excludeFieldsWithoutExposeAnnotation();
         final Gson gson = gsonBuilder.create();
@@ -123,19 +143,28 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
                 .baseUrl(serverAddress)
                 .addConverterFactory(GsonConverterFactory.create(gson))
                 .build();
-        productService = retrofit.create(ProductService.class);
+        remoteService = retrofit.create(RemoteService.class);
+    }
+
+    private void populateListAdapterAndSetViewEnabled() {
+        populateListAdapter();
+        setAddProductAndSyncButtonsEnabled(true);
     }
 
     private void populateListAdapter() {
-        List<Product> productsFromDb = dataSource.getAllProducts();
+        List<Long> tagIds = new ArrayList<>();
+        for (String tagId : observedTagIds) {
+            tagIds.add(Long.valueOf(tagId));
+        }
+        List<Product> productsFromDb = productDataSource.getAllProductsForTags(tagIds);
+        Log.d(TAG, "Found products: " + productsFromDb);
         initializeListView(productsFromDb);
     }
 
     private void initializeListView(List<Product> products) {
         ListView listView = (ListView) findViewById(R.id.list_view);
-        adapter = new ProductAdapter(ProductActivity.this, R.layout.product_item, products, this);
+        adapter = new ProductListAdapter(ProductActivity.this, R.layout.deletable_list_item, products, this);
         listView.setAdapter(adapter);
-        setAddProductAndSyncButtonsEnabled(true);
     }
 
     private void getUserParametersFromIntent() {
@@ -161,6 +190,11 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
             case R.id.button_sync:
                 new SynchronizeTask().execute();
                 break;
+            case R.id.button_configure_tags:
+                Intent observedTagsIntent = new Intent(this, ObservedTagsActivity.class);
+                Log.d(TAG, "Navigating to observed tags configuration");
+                startActivity(observedTagsIntent);
+                break;
         }
     }
 
@@ -176,14 +210,20 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
                 String productName = input.getText().toString().trim();
                 Log.d(TAG, "Entered product name: " + productName);
                 boolean productNameEmpty = productName.isEmpty();
-                boolean productNameNotUnique = !isNewProductNameUnique(productName);
+                boolean productNameNotUnique = !productDataSource.isProductNameUnique(productName);
                 if (productNameEmpty || productNameNotUnique) {
                     String errorMsg = productNameEmpty ? "Product name cannot be empty" : "Product name has to be unique";
                     Log.d(TAG, errorMsg);
                     showToast(errorMsg);
                     return;
                 }
-                Product newProduct = dataSource.createProduct(productName);
+                Product newProduct = productDataSource.createProduct(productName);
+                long newProductLocalId = newProduct.getLocalId();
+                for (String localTagId : observedTagIds) {
+                    long tagToAddId = Long.valueOf(localTagId);
+                    Tag tagToAdd = tagsDataSource.getTag(tagToAddId);
+                    relationsDataSource.createRelation(newProduct, tagToAdd);
+                }
                 updateAdapterWithNewProduct(newProduct);
             }
         });
@@ -194,15 +234,6 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
             }
         });
         builder.show();
-    }
-
-    private boolean isNewProductNameUnique(String productName) {
-        List<Product> products = adapter.getProducts();
-        for (Product p : products) {
-            if (p.getName().equals(productName))
-                return false;
-        }
-        return true;
     }
 
     private void updateAdapterWithNewProduct(Product product) {
@@ -216,14 +247,27 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
         showDeleteProductDialog(product);
     }
 
+    @Override
+    public void onProductNameClick(Product product) {
+        Log.d(TAG, "Received product name click for product: " + product);
+        Intent productDetailsIntent = new Intent(this, ProductDetailsActivity.class);
+        productDetailsIntent.putExtra(Consts.PRODUCT_FOR_DETAILS, product);
+        startActivity(productDetailsIntent);
+    }
+
     private void showDeleteProductDialog(final Product product) {
         AlertDialog.Builder builder = new AlertDialog.Builder(ProductActivity.this);
         builder.setMessage("Do you want to delete " + product.getName() + "?");
         builder.setPositiveButton("Delete", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
-                dataSource.deleteProduct(product.getLocalId());
+                long productLocalId = product.getLocalId();
+                productDataSource.deleteProduct(productLocalId);
                 addProductIdToDelete(product);
+                List<ProductTagRelation> relatedToProduct = relationsDataSource.getAllRelationsForProduct(productLocalId);
+                for (ProductTagRelation relation : relatedToProduct) {
+                    relationsDataSource.deleteRelation(relation.getLocalId());
+                }
                 removeProductFromAdapter(product.getLocalId());
                 Log.d(TAG, "Deleted product: " + product.getName());
             }
@@ -244,80 +288,80 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
         }
     }
 
-    @Override
-    public void onIncreaseQuantityClick(Product product) {
-        Log.d(TAG, "Received inc click for: " + product);
-        showModifyQuantityDialog(product, true);
-    }
-
     private void showToast(String message) {
         Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
     }
 
-    private void showModifyQuantityDialog(final Product product, boolean increase) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(ProductActivity.this);
-        String operationName = increase ? "INCREASE" : "DECREASE";
-        final int operationSign = increase ? 1 : -1;
-        builder.setTitle("Enter the amount to " + operationName + "  " + product.getName() + " quantity");
-        final EditText input = new EditText(ProductActivity.this);
-        input.setInputType(InputType.TYPE_CLASS_NUMBER);
-        builder.setView(input);
-        builder.setPositiveButton("Confirm", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                String increaseString = input.getText().toString();
-                Log.d(TAG, "Entered product change quantity: " + increaseString);
-                try {
-                    int modification = operationSign * Integer.parseInt(increaseString);
-                    updateProductWithModification(modification, product);
-                } catch (NumberFormatException e) {
-                    String errorMsg = "Invalid product change quantity entered";
-                    Log.d(TAG, errorMsg);
-                    showToast(errorMsg);
+    private void synchronizeRelationsState(List<ProductTagRelation> receivedRelations) {
+        for (ProductTagRelation received : receivedRelations) {
+            ProductTagRelation found = relationsDataSource.getRelation(received.getProductId(), received.getTagId());
+            if (found != null) {
+                found.setActive(received.getActive());
+                found.setRelationUpdateTimestamp(received.getRelationUpdateTimestamp());
+                relationsDataSource.updateRelationActivityFromRemote(found);
+            } else {
+                Product product = productDataSource.getProductForRemoteId(received.getProductId());
+                Tag tag = tagsDataSource.getTagForRemoteId(received.getTagId());
+                if (product != null && tag != null) {
+                    received.setTagLocalId(tag.getLocalId());
+                    received.setProductLocalId(product.getLocalId());
+                    relationsDataSource.createRelationFromRemote(received);
                 }
             }
-        });
-        builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                dialog.cancel();
-            }
-        });
-        builder.show();
-    }
-
-    private void updateProductWithModification(int quantityChange, Product product) {
-        int newDeviceQuantity = product.getDeviceQuantity() + quantityChange;
-        int previousQuantity = product.getQuantity();
-        int newQuantity = previousQuantity + quantityChange;
-        if (previousQuantity >= 0 && newQuantity < 0) {
-            String errorMsg = "Product quantity cannot be set below negative";
-            Log.d(TAG, errorMsg);
-            showToast(errorMsg);
-            return;
         }
-        product.setQuantity(newQuantity);
-        product.setDeviceQuantity(newDeviceQuantity);
-        adapter.notifyDataSetChanged();
-        dataSource.updateProduct(product.getLocalId(), product.getQuantity(), product.getDeviceQuantity());
-        Log.d(TAG, "Prepared product for update: " + product);
     }
 
-    @Override
-    public void onDecreaseQuantityClick(Product product) {
-        Log.d(TAG, "Received dec click for: " + product);
-        showModifyQuantityDialog(product, false);
+    private void synchronizeTagsState(List<Tag> receivedTags, List<Tag> allTags) {
+        List<Tag> localCopy = new ArrayList<>(allTags);
+        List<Tag> receivedToBeCreated = new ArrayList<>();
+        for (Tag received : receivedTags) {
+            boolean includedInLocal = false;
+            for (Tag local : localCopy) {
+                if (received.getName().equals(local.getName())) {
+                    includedInLocal = true;
+                    break;
+                }
+            }
+            if (!includedInLocal) {
+                receivedToBeCreated.add(received);
+            }
+        }
+
+        // create new
+        for (Tag tag : receivedToBeCreated) {
+            tagsDataSource.createTagFromRemote(tag);
+        }
+        receivedTags.removeAll(receivedToBeCreated);
+
+        // now localCopy has occurring in both, same as receivedProducts
+        for (Tag local : localCopy) {
+            for (Tag received : receivedTags) {
+                if (local.getName().equals(received.getName())) {
+                    boolean shouldUpdate = !local.getId().equals(received.getId());
+                    if (shouldUpdate) {
+                        long localId = local.getLocalId();
+                        int newId = received.getId();
+                        tagsDataSource.updateTagRemoteId(localId, newId);
+                        List<ProductTagRelation> relationsToUpdateTagId =
+                                relationsDataSource.getAllRelationsForTag(localId);
+                        for (ProductTagRelation relation : relationsToUpdateTagId) {
+                            relationsDataSource.updateRemoteTagId(relation.getLocalId(), newId);
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    public void synchronizeProductsState(List<Product> receivedProducts) {
-        List<Product> localCopy = new ArrayList<>(adapter.getProducts());
-
+    public void synchronizeProductsState(List<Product> receivedProducts, List<Product> allProducts) {
+        List<Product> localCopy = new ArrayList<>(allProducts);
         List<Product> localToBeDeleted = new ArrayList<>();
         for (Product local : localCopy) {
             boolean includedInReceived = false;
             for (Product received : receivedProducts) {
                 if (local.getName().equals(received.getName())) {
                     includedInReceived = true;
+                    break;
                 }
             }
             if (!includedInReceived) {
@@ -326,43 +370,59 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
         }
         // delete all from localToBeDeleted and adapter
         for (Product local : localToBeDeleted) {
-            dataSource.deleteProduct(local.getLocalId());
+            productDataSource.deleteProduct(local.getLocalId());
+            List<ProductTagRelation> relationsToDelete = relationsDataSource.getAllRelationsForProduct(local.getLocalId());
+            for (ProductTagRelation relation : relationsToDelete) {
+                relationsDataSource.deleteRelation(relation.getLocalId());
+            }
         }
         localCopy.removeAll(localToBeDeleted);
-        adapter.getProducts().removeAll(localToBeDeleted);
-        // now localCopy has only those that should stay
 
+        // now localCopy has only those that should stay
         List<Product> receivedToBeCreated = new ArrayList<>();
         for (Product received : receivedProducts) {
             boolean includedInLocal = false;
             for (Product local : localCopy) {
                 if (received.getName().equals(local.getName())) {
                     includedInLocal = true;
+                    break;
                 }
             }
             if (!includedInLocal) {
                 receivedToBeCreated.add(received);
             }
         }
-        // create and add to collection
-        List<Product> createdFromReceived = new ArrayList<>();
+
+        // create
         for (Product received : receivedToBeCreated) {
-            Product created = dataSource.createProductFromRemote(received.getName(), received.getId(),
-                    received.getQuantity());
-            createdFromReceived.add(created);
+            productDataSource.createProductFromRemote(received);
         }
         receivedProducts.removeAll(receivedToBeCreated);
-        adapter.getProducts().addAll(createdFromReceived);
 
         // now localCopy has occurring in both, same as receivedProducts
         for (Product local : localCopy) {
             for (Product received : receivedProducts) {
                 if (local.getName().equals(received.getName())) {
-                    boolean shouldUpdate = !local.getId().equals(received.getId()) || !(local.getQuantity() == received.getQuantity());
+                    boolean shouldUpdate = !local.getId().equals(received.getId()) ||
+                            !(local.getQuantity() == received.getQuantity()) ||
+                            !(local.getPriority() == received.getPriority()) ||
+                            !(local.getPriorityUpdateTimestamp() == received.getPriorityUpdateTimestamp());
                     if (shouldUpdate) {
+                        // update according product-tag relation remote id if id changed
+                        if (local.getId() != received.getId()) {
+                            long localId = local.getLocalId();
+                            int newId = received.getId();
+                            List<ProductTagRelation> relationsToUpdateProductId =
+                                    relationsDataSource.getAllRelationsForProduct(localId);
+                            for (ProductTagRelation relation : relationsToUpdateProductId) {
+                                relationsDataSource.updateRemoteProductId(relation.getLocalId(), newId);
+                            }
+                        }
                         local.setId(received.getId());
                         local.setQuantity(received.getQuantity());
-                        dataSource.updateProductFromRemote(local.getLocalId(), local.getId(), local.getQuantity());
+                        local.setPriority(received.getPriority());
+                        local.setPriorityUpdateTimestamp(received.getPriorityUpdateTimestamp());
+                        productDataSource.updateProductFromRemote(local);
                     }
                 }
             }
@@ -370,10 +430,11 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
     }
 
     private class SynchronizeTask extends AsyncTask<Void, Void, Void> {
-
         private boolean networkError = false;
         private boolean syncError = false;
         List<Product> receivedProducts;
+        List<Tag> receivedTags;
+        List<ProductTagRelation> receivedRelations;
 
         private class SynchronizationException extends Exception {
             public SynchronizationException(String message) {
@@ -390,8 +451,10 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
         @Override
         protected Void doInBackground(Void... params) {
             try {
+                putAndUpdateTags();
                 syncDeleteOperations();
-                putAndUpdateCollection();
+                putAndUpdateProducts();
+                putAndUpdateRelations();
             } catch (IOException e) {
                 networkError = true;
             } catch (SynchronizationException e) {
@@ -400,14 +463,46 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
             return null;
         }
 
-        private void putAndUpdateCollection() throws IOException, SynchronizationException {
-            Call<List<Product>> putProductsCall = productService.putProducts(userGoogleId,
-                    userGoogleToken, deviceId, adapter.getProducts());
+        private void putAndUpdateRelations() throws IOException, SynchronizationException {
+            final List<ProductTagRelation> allRelations = relationsDataSource.getAllRelations();
+            Log.d(TAG, "All relations before sync: " + allRelations);
+            Call<List<ProductTagRelation>> putRelationsCall = remoteService.putRelations(userGoogleId,
+                    userGoogleToken, allRelations);
+            Response<List<ProductTagRelation>> res = putRelationsCall.execute();
+            if (res.isSuccess()) {
+                receivedRelations = res.body();
+                Log.d(TAG, "Successfully put relations list, received: " + receivedRelations);
+                synchronizeRelationsState(receivedRelations);
+            } else {
+                Log.d(TAG, "Could not put relations list");
+                throw new SynchronizationException("Operation failed, could not update");
+            }
+        }
+
+        private void putAndUpdateTags() throws IOException, SynchronizationException {
+            final List<Tag> allTags = tagsDataSource.getAllTags();
+            Call<List<Tag>> putTagsCall = remoteService.putTags(userGoogleId,
+                    userGoogleToken, allTags);
+            Response<List<Tag>> res = putTagsCall.execute();
+            if (res.isSuccess()) {
+                receivedTags = res.body();
+                Log.d(TAG, "Successfully put tags list, received: " + receivedTags);
+                synchronizeTagsState(receivedTags, allTags);
+            } else {
+                Log.d(TAG, "Could not put tags list");
+                throw new SynchronizationException("Operation failed, could not update");
+            }
+        }
+
+        private void putAndUpdateProducts() throws IOException, SynchronizationException {
+            final List<Product> allProducts = productDataSource.getAllProducts();
+            Call<List<Product>> putProductsCall = remoteService.putProducts(userGoogleId,
+                    userGoogleToken, deviceId, allProducts);
             Response<List<Product>> res = putProductsCall.execute();
             if (res.isSuccess()) {
                 receivedProducts = res.body();
                 Log.d(TAG, "Successfully put products list, received: " + receivedProducts);
-                synchronizeProductsState(receivedProducts);
+                synchronizeProductsState(receivedProducts, allProducts);
             } else {
                 Log.d(TAG, "Could not put products list");
                 throw new SynchronizationException("Operation failed, could not update");
@@ -416,7 +511,7 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
 
         private void syncDeleteOperations() throws IOException, SynchronizationException {
             for (String id : idsToDelete) {
-                Call<String> deleteProductCall = productService.deleteProduct(userGoogleId,
+                Call<String> deleteProductCall = remoteService.deleteProduct(userGoogleId,
                         userGoogleToken, deviceId, Integer.valueOf(id));
                 Response<String> res = deleteProductCall.execute();
                 if (res.isSuccess()) {
@@ -462,6 +557,7 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
             if (progressDialog.isShowing()) {
                 progressDialog.dismiss();
             }
+            populateListAdapter();
             setAddProductAndSyncButtonsEnabled(true);
         }
     }
@@ -469,5 +565,6 @@ public class ProductActivity extends AppCompatActivity implements View.OnClickLi
     private void setAddProductAndSyncButtonsEnabled(boolean enabled) {
         findViewById(R.id.button_add_product).setEnabled(enabled);
         findViewById(R.id.button_sync).setEnabled(enabled);
+        findViewById(R.id.button_configure_tags).setEnabled(enabled);
     }
 }

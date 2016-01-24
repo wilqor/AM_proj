@@ -13,6 +13,7 @@
         <activity
             android:name=".logic.MainActivity"
             android:label="@string/app_name"
+            android:screenOrientation="portrait"
             android:theme="@style/AppTheme.NoActionBar" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -20,7 +21,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".logic.ProductActivity" >
+        <activity
+            android:name=".logic.ProductActivity"
+            android:screenOrientation="portrait" >
+        </activity>
+        <activity android:name=".logic.ProductDetailsActivity" >
+        </activity>
+        <activity android:name=".logic.ObservedTagsActivity" >
         </activity>
     </application>
 

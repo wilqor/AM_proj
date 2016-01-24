@@ -27,13 +27,32 @@ public class ProductEntity {
     @Column(name = "owner_google_id")
     private String ownerGoogleId;
 
+    @Enumerated(EnumType.STRING)
+    private ProductPriority priority;
+
+    @Column(name = "priority_update_timestamp")
+    private long priorityUpdateTimestamp;
+
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL)
     private List<ProductSubsetEntity> subsets = new ArrayList<>();
+
+    @OneToMany(mappedBy = "productEntity", cascade = CascadeType.ALL)
+    private List<ProductTagAssociation> tags;
+
+    public List<ProductTagAssociation> getTags() {
+        return tags;
+    }
 
     public ProductEntity() {}
 
     public ProductEntity(Product product, String ownerGoogleId) {
         this.name = product.getName();
+        if (product.getPriority() != null) {
+            this.priority = product.getPriority();
+        } else {
+            this.priority = ProductPriority.MEDIUM;
+        }
+        this.priorityUpdateTimestamp = product.getPriorityUpdateTimestamp();
         this.ownerGoogleId = ownerGoogleId;
         this.quantity = 0;
     }
@@ -66,16 +85,32 @@ public class ProductEntity {
         return id;
     }
 
+    public void setPriority(ProductPriority priority) {
+        this.priority = priority;
+    }
+
+    public void setPriorityUpdateTimestamp(long priorityUpdateTimestamp) {
+        this.priorityUpdateTimestamp = priorityUpdateTimestamp;
+    }
+
+    public ProductPriority getPriority() {
+        return priority;
+    }
+
+    public long getPriorityUpdateTimestamp() {
+        return priorityUpdateTimestamp;
+    }
+
     public List<ProductSubsetEntity> getSubsets() {
         return subsets;
     }
 
     public static Product toProduct(ProductEntity entity) {
-        return new Product(entity.id, entity.name, entity.quantity);
+        return new Product(entity.id, entity.name, entity.quantity, entity.priority, entity.priorityUpdateTimestamp);
     }
 
     public static Product toProduct(ProductEntity entity, int deviceQuantity) {
-        return new Product(entity.id, entity.name, entity.quantity, deviceQuantity);
+        return new Product(entity.id, entity.name, entity.quantity, entity.priority, entity.priorityUpdateTimestamp, deviceQuantity);
     }
 
     public static List<Product> toProducts(List<ProductEntity> entities) {

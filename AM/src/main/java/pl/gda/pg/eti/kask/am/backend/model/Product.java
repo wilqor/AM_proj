@@ -8,19 +8,25 @@ public class Product {
     private Integer id;
     private int quantity;
     private int deviceQuantity;
+    private ProductPriority priority;
+    private long priorityUpdateTimestamp;
 
     public Product(){ }
 
-    public Product(int id, String name, int quantity) {
-        this.name = name;
-        this.id = id;
-        this.quantity = quantity;
+    public Product(int id, String name, int quantity, ProductPriority priority, long priorityUpdateTimestamp) {
+        this(id, name, quantity, priority, priorityUpdateTimestamp, 0);
     }
 
-    public Product(int id, String name, int quantity, int deviceQuantity) {
+    public Product(int id, String name, int quantity, ProductPriority priority, long priorityUpdateTimestamp, int deviceQuantity) {
         this.id = id;
         this.name = name;
         this.quantity = quantity;
+        if (priority != null) {
+            this.priority = priority;
+        } else {
+            this.priority = ProductPriority.MEDIUM;
+        }
+        this.priorityUpdateTimestamp = priorityUpdateTimestamp;
         this.deviceQuantity = deviceQuantity;
     }
 
@@ -58,5 +64,21 @@ public class Product {
 
     public boolean notSynchronizedYet() {
         return id == 0;
+    }
+
+    public ProductPriority getPriority() {
+        return priority;
+    }
+
+    public void setPriority(ProductPriority priority) {
+        this.priority = priority;
+    }
+
+    public long getPriorityUpdateTimestamp() {
+        return priorityUpdateTimestamp;
+    }
+
+    public void setPriorityUpdateTimestamp(long priorityUpdateTimestamp) {
+        this.priorityUpdateTimestamp = priorityUpdateTimestamp;
     }
 }

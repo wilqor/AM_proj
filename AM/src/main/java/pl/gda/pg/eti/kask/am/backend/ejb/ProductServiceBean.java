@@ -27,6 +27,15 @@ public class ProductServiceBean implements Serializable {
     public ProductServiceBean() {
     }
 
+    public ProductEntity findProduct(int id, String ownerGoogleId) {
+        TypedQuery<ProductEntity> q = em.createQuery("SELECT p FROM ProductEntity p WHERE p.ownerGoogleId = :ownerGoogleId AND p.id = :id",
+                ProductEntity.class);
+        q.setParameter("ownerGoogleId", ownerGoogleId);
+        q.setParameter("id", id);
+        List<ProductEntity> productEntities = q.getResultList();
+        return productEntities.isEmpty() ? null : productEntities.get(0);
+    }
+
     public List<Product> findProducts(String ownerGoogleId, String deviceId) {
         TypedQuery<ProductEntity> q = em.createQuery("SELECT p FROM ProductEntity p WHERE p.ownerGoogleId = :ownerGoogleId",
                 ProductEntity.class);
@@ -63,7 +72,7 @@ public class ProductServiceBean implements Serializable {
         em.remove(em.merge(entity));
     }
 
-    public void updateProductQuantity(ProductEntity entity, Product product, String deviceId) {
+    public void updateProductQuantityAndPriority(ProductEntity entity, Product product, String deviceId) {
         ProductSubsetEntity updatedSubset = findSubsetForDevice(deviceId, entity);
         if (updatedSubset == null) {
             updatedSubset = new ProductSubsetEntity(deviceId);
@@ -72,6 +81,10 @@ public class ProductServiceBean implements Serializable {
         }
         updatedSubset.setQuantity(product.getDeviceQuantity());
         entity.setQuantity(recalculateProductQuantity(entity));
+        if (product.getPriority() != null && product.getPriorityUpdateTimestamp() >= entity.getPriorityUpdateTimestamp()) {
+            entity.setPriority(product.getPriority());
+            entity.setPriorityUpdateTimestamp(product.getPriorityUpdateTimestamp());
+        }
         em.merge(entity);
         em.flush();
     }
@@ -79,7 +92,7 @@ public class ProductServiceBean implements Serializable {
     public Product createOrUpdateProduct(Product product, String ownerGoogleId, String deviceId) {
         ProductEntity equivalent = getEquivalentProduct(product, ownerGoogleId);
         if (equivalent != null) {
-            updateProductQuantity(equivalent, product, deviceId);
+            updateProductQuantityAndPriority(equivalent, product, deviceId);
             return ProductEntity.toProduct(equivalent, product.getDeviceQuantity());
         } else if (product.notSynchronizedYet()) {
             equivalent = createProduct(product, ownerGoogleId, deviceId);
@@ -91,15 +104,13 @@ public class ProductServiceBean implements Serializable {
     private
     @CheckForNull
     ProductEntity getEquivalentProduct(Product product, String ownerGoogleId) {
-        if (!product.notSynchronizedYet()) {
-            TypedQuery<ProductEntity> q = em.createQuery("SELECT p FROM ProductEntity p WHERE p.ownerGoogleId = :ownerGoogleId AND p.name = :productName",
-                    ProductEntity.class);
-            q.setParameter("ownerGoogleId", ownerGoogleId);
-            q.setParameter("productName", product.getName());
-            List<ProductEntity> foundProducts = q.getResultList();
-            if (!foundProducts.isEmpty()) {
-                return foundProducts.get(0);
-            }
+        TypedQuery<ProductEntity> q = em.createQuery("SELECT p FROM ProductEntity p WHERE p.ownerGoogleId = :ownerGoogleId AND p.name = :productName",
+                ProductEntity.class);
+        q.setParameter("ownerGoogleId", ownerGoogleId);
+        q.setParameter("productName", product.getName());
+        List<ProductEntity> foundProducts = q.getResultList();
+        if (!foundProducts.isEmpty()) {
+            return foundProducts.get(0);
         }
         return null;
     }

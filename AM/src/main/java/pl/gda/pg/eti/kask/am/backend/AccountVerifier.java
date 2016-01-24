@@ -52,4 +52,8 @@ public class AccountVerifier {
             return false;
         }
     }
+
+    public static boolean verified(String ownerGoogleId, String ownerGoogleToken) {
+        return new AccountVerifier(ownerGoogleId, ownerGoogleToken).verify();
+    }
 }
